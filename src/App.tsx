@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { removeBackground } from '@imgly/background-removal';
 
 // Data
 const MM_PX = 300 / 25.4; // 300 dpi
@@ -44,7 +45,7 @@ function App() {
   const [toastMsg, setToastMsg] = useState('');
   const [toastVisible, setToastVisible] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
-  const [isDragging, setIsDragging] = useState(false);
+  const isDraggingRef = useRef(false);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const stageBoxRef = useRef<HTMLDivElement>(null);
@@ -67,25 +68,25 @@ function App() {
     toastTimerRef.current = setTimeout(() => setToastVisible(false), 3200);
   }, []);
 
-  const renderCanvas = useCallback(() => {
+  // Render canvas whenever image, zoom, offset or doc changes
+  useEffect(() => {
     if (!img || !canvasRef.current) return;
-    const ctx = canvasRef.current.getContext('2d');
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
     if (!ctx) return;
-    const s = outSize();
-    canvasRef.current.width = s.W;
-    canvasRef.current.height = s.H;
+    const d = DOCS[docIdx];
+    const W = Math.round(d.w * MM_PX);
+    const H = Math.round(d.h * MM_PX);
+    canvas.width = W;
+    canvas.height = H;
     ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, s.W, s.H);
-    const base = Math.max(s.W / img.width, s.H / img.height);
+    ctx.fillRect(0, 0, W, H);
+    const base = Math.max(W / img.width, H / img.height);
     const sc = base * zoom;
     const dw = img.width * sc;
     const dh = img.height * sc;
-    ctx.drawImage(img, (s.W - dw) / 2 + offset.x, (s.H - dh) / 2 + offset.y, dw, dh);
-  }, [img, zoom, offset, outSize]);
-
-  useEffect(() => {
-    renderCanvas();
-  }, [renderCanvas]);
+    ctx.drawImage(img, (W - dw) / 2 + offset.x, (H - dh) / 2 + offset.y, dw, dh);
+  }, [img, zoom, offset, docIdx]);
 
   // Reveal animation
   useEffect(() => {
@@ -246,35 +247,34 @@ function App() {
     );
   };
 
-  const aiBackground = () => {
+  const aiBackground = async () => {
     if (!origBlob) {
       showToast('Сначала загрузите фото');
       return;
     }
     setBgLoading(true);
-    // Dynamic import from CDN for background removal
-    const importModule = new Function('url', 'return import(url)');
-    importModule('https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.5.5/+esm')
-      .then((mod: { removeBackground: (blob: Blob) => Promise<Blob> }) => mod.removeBackground(origBlob))
-      .then((blob: Blob) => {
-        const url = URL.createObjectURL(blob);
-        const image = new Image();
-        image.onload = () => {
-          setImg(image);
-          setBgDone(true);
-          setBgLoading(false);
-          showToast('Фон заменён на белый');
-        };
-        image.onerror = () => {
-          setBgLoading(false);
-          showToast('Не удалось применить фон');
-        };
-        image.src = url;
-      })
-      .catch(() => {
-        setBgLoading(false);
-        showToast('AI-удаление фона недоступно офлайн — снимите на ровном светлом фоне');
+    try {
+      const blob = await removeBackground(origBlob, {
+        output: { format: 'image/png' },
       });
+      const url = URL.createObjectURL(blob);
+      const image = new Image();
+      image.onload = () => {
+        setImg(image);
+        setBgDone(true);
+        setBgLoading(false);
+        showToast('Фон заменён на белый');
+      };
+      image.onerror = () => {
+        setBgLoading(false);
+        showToast('Не удалось применить фон');
+      };
+      image.src = url;
+    } catch (err) {
+      console.error('AI background removal error:', err);
+      setBgLoading(false);
+      showToast('AI-удаление фона недоступно — снимите на ровном светлом фоне');
+    }
   };
 
   const downloadPhoto = () => {
@@ -348,13 +348,13 @@ function App() {
 
   // Drag handlers for canvas
   const handlePointerDown = (e: React.PointerEvent) => {
-    setIsDragging(true);
+    isDraggingRef.current = true;
     dragStartRef.current = { x: e.clientX, y: e.clientY };
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    stageBoxRef.current?.setPointerCapture(e.pointerId);
   };
 
   const handlePointerMove = (e: React.PointerEvent) => {
-    if (!isDragging || !canvasRef.current) return;
+    if (!isDraggingRef.current || !canvasRef.current) return;
     const rect = canvasRef.current.getBoundingClientRect();
     const k = canvasRef.current.width / rect.width;
     setOffset((prev) => ({
@@ -365,7 +365,7 @@ function App() {
   };
 
   const handlePointerUp = () => {
-    setIsDragging(false);
+    isDraggingRef.current = false;
   };
 
   const handleWheel = (e: React.WheelEvent) => {
@@ -376,7 +376,7 @@ function App() {
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
-    setIsDragging(false);
+    isDraggingRef.current = false;
     if (dropzoneRef.current) dropzoneRef.current.classList.remove('drag');
     if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
   };
