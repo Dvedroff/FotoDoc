@@ -1,5 +1,4 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { removeBackground } from '@imgly/background-removal';
 
 // Data
 const MM_PX = 300 / 25.4; // 300 dpi
@@ -254,6 +253,8 @@ function App() {
     }
     setBgLoading(true);
     try {
+      // Динамический импорт чтобы избежать конфликтов с React
+      const { removeBackground } = await import('@imgly/background-removal');
       const blob = await removeBackground(origBlob, {
         output: { format: 'image/png' },
       });
