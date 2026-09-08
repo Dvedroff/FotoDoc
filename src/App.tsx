@@ -347,25 +347,44 @@ function App() {
   };
 
   // Drag handlers for canvas
-  const handlePointerDown = (e: React.PointerEvent) => {
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
     isDraggingRef.current = true;
     dragStartRef.current = { x: e.clientX, y: e.clientY };
-    stageBoxRef.current?.setPointerCapture(e.pointerId);
+    console.log('Pointer down:', e.clientX, e.clientY);
+    (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId);
   };
 
-  const handlePointerMove = (e: React.PointerEvent) => {
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!isDraggingRef.current || !canvasRef.current) return;
+    e.preventDefault();
     const rect = canvasRef.current.getBoundingClientRect();
     const k = canvasRef.current.width / rect.width;
+    const dx = (e.clientX - dragStartRef.current.x) * k;
+    const dy = (e.clientY - dragStartRef.current.y) * k;
+    console.log('Pointer move:', dx, dy, 'offset will be:', offset.x + dx, offset.y + dy);
     setOffset((prev) => ({
-      x: prev.x + (e.clientX - dragStartRef.current.x) * k,
-      y: prev.y + (e.clientY - dragStartRef.current.y) * k,
+      x: prev.x + dx,
+      y: prev.y + dy,
     }));
     dragStartRef.current = { x: e.clientX, y: e.clientY };
   };
 
-  const handlePointerUp = () => {
+  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
     isDraggingRef.current = false;
+    console.log('Pointer up');
+    (e.currentTarget as HTMLDivElement).releasePointerCapture(e.pointerId);
+  };
+
+  // Auto-fit: center the image and adjust zoom to fit the face area
+  const autoFit = () => {
+    if (!img || !canvasRef.current) return;
+    const s = outSize();
+    // Calculate zoom to fit image height to canvas
+    const fitZoom = Math.min(s.W / img.width, s.H / img.height) * 1.1;
+    setZoom(Math.min(3.2, Math.max(0.6, fitZoom)));
+    setOffset({ x: 0, y: 0 });
+    showToast('Фото подогнано автоматически');
   };
 
   const handleWheel = (e: React.WheelEvent) => {
@@ -628,6 +647,9 @@ function App() {
                   <div className="ed-actions">
                     <button className="btn btn-ghost btn-sm" onClick={aiBackground} disabled={bgLoading}>
                       {bgLoading ? '⏳ Обрабатываем…' : bgDone ? '✅ Фон убран (AI)' : '✨ Убрать фон (AI)'}
+                    </button>
+                    <button className="btn btn-ghost btn-sm" onClick={autoFit}>
+                      🎯 Автоподгонка
                     </button>
                     <button
                       className="btn btn-ghost btn-sm"
