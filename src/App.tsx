@@ -44,6 +44,7 @@ function App() {
   const [toastMsg, setToastMsg] = useState('');
   const [toastVisible, setToastVisible] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
+  const [uploadMenuOpen, setUploadMenuOpen] = useState(false);
   const isDraggingRef = useRef(false);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -577,7 +578,6 @@ function App() {
             <div
               ref={dropzoneRef}
               className="dropzone reveal"
-              onClick={() => pickFile()}
               onDrop={handleDrop}
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
@@ -589,21 +589,96 @@ function App() {
                   <path d="m21 15-4.5-4.5L7 20" />
                 </svg>
               </div>
-              <h3>Загрузите фото или сделайте селфи</h3>
-              <p>Перетащите сюда, вставьте (Ctrl+V) или выберите файл</p>
-              <div className="dz-actions">
-                <button className="btn btn-primary" onClick={(e) => pickFile(e)}>
-                  Выбрать фото
-                </button>
-                <button className="btn btn-ghost" onClick={(e) => openCamera(e)}>
-                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z" />
-                    <circle cx="12" cy="13" r="3.5" />
+              <h3>Загрузите фото</h3>
+              <p>Выберите способ загрузки или перетащите файл сюда</p>
+              
+              {/* Раскрывающийся список вариантов */}
+              <div className="upload-options">
+                <button 
+                  className="btn btn-primary upload-toggle"
+                  onClick={() => setUploadMenuOpen(!uploadMenuOpen)}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                    <path d="M12 5v14M5 12h14" />
                   </svg>
-                  Сделать селфи сейчас
+                  Выбрать способ загрузки
+                  <svg 
+                    width="16" 
+                    height="16" 
+                    viewBox="0 0 24 24" 
+                    fill="none" 
+                    stroke="currentColor" 
+                    strokeWidth="2" 
+                    strokeLinecap="round"
+                    style={{ 
+                      transform: uploadMenuOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                      transition: 'transform 0.3s ease'
+                    }}
+                  >
+                    <path d="M6 9l6 6 6-6" />
+                  </svg>
                 </button>
+                
+                <div className={`upload-menu ${uploadMenuOpen ? 'open' : ''}`}>
+                  <button className="upload-option" onClick={(e) => { e.stopPropagation(); pickFile(e); setUploadMenuOpen(false); }}>
+                    <div className="upload-option-icon">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                        <polyline points="17 8 12 3 7 8" />
+                        <line x1="12" y1="3" x2="12" y2="15" />
+                      </svg>
+                    </div>
+                    <div className="upload-option-text">
+                      <strong>Выбрать файл</strong>
+                      <span>Загрузить с компьютера или телефона</span>
+                    </div>
+                  </button>
+                  
+                  <button className="upload-option" onClick={(e) => { e.stopPropagation(); openCamera(e); setUploadMenuOpen(false); }}>
+                    <div className="upload-option-icon">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z" />
+                        <circle cx="12" cy="13" r="3.5" />
+                      </svg>
+                    </div>
+                    <div className="upload-option-text">
+                      <strong>Сделать селфи</strong>
+                      <span>Использовать камеру устройства</span>
+                    </div>
+                  </button>
+                  
+                  <button className="upload-option" onClick={(e) => { e.stopPropagation(); setUploadMenuOpen(false); showToast('Нажмите Ctrl+V чтобы вставить изображение из буфера обмена'); }}>
+                    <div className="upload-option-icon">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                      </svg>
+                    </div>
+                    <div className="upload-option-text">
+                      <strong>Вставить из буфера</strong>
+                      <span>Нажмите Ctrl+V (скриншот или скопированное фото)</span>
+                    </div>
+                  </button>
+                  
+                  <button className="upload-option" onClick={(e) => { e.stopPropagation(); setUploadMenuOpen(false); showToast('Просто перетащите файл в эту область'); }}>
+                    <div className="upload-option-icon">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M5 9l-3 3 3 3" />
+                        <path d="M9 5l3-3 3 3" />
+                        <path d="M15 19l-3 3-3-3" />
+                        <path d="M19 9l3 3-3 3" />
+                        <line x1="2" y1="12" x2="22" y2="12" />
+                        <line x1="12" y1="2" x2="12" y2="22" />
+                      </svg>
+                    </div>
+                    <div className="upload-option-text">
+                      <strong>Перетащить файл</strong>
+                      <span>Перетащите изображение из папки</span>
+                    </div>
+                  </button>
+                </div>
               </div>
-              <div className="dz-or">или</div>
+              
               <p className="dz-hint">JPEG, PNG, HEIC, WebP · до 15 МБ</p>
             </div>
             <input
