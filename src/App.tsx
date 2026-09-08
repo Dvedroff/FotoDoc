@@ -277,31 +277,74 @@ function App() {
     }
   };
 
-  const downloadPhoto = () => {
-    if (!canvasRef.current) return;
-    canvasRef.current.toBlob(
-      (blob) => {
-        if (!blob) return;
-        const d = DOCS[docIdx];
-        saveBlob(blob, `foto-${d.w}x${d.h}mm.jpg`);
-      },
-      'image/jpeg',
-      0.95
-    );
+  // Create off-screen canvas with current photo
+  const createPhotoCanvas = (): HTMLCanvasElement | null => {
+    if (!img) return null;
+    const d = DOCS[docIdx];
+    const W = Math.round(d.w * MM_PX);
+    const H = Math.round(d.h * MM_PX);
+    const canvas = document.createElement('canvas');
+    canvas.width = W;
+    canvas.height = H;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    
+    // Fill white background
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, W, H);
+    
+    // Draw image with current zoom and offset
+    const base = Math.max(W / img.width, H / img.height);
+    const sc = base * zoom;
+    const dw = img.width * sc;
+    const dh = img.height * sc;
+    ctx.drawImage(img, (W - dw) / 2 + offset.x, (H - dh) / 2 + offset.y, dw, dh);
+    
+    return canvas;
   };
 
-  const downloadSheet = () => {
-    if (!canvasRef.current || !img) return;
-    const SW = Math.round(100 * MM_PX);
-    const SH = Math.round(150 * MM_PX);
-    const pw = canvasRef.current.width;
-    const ph = canvasRef.current.height;
-    const gap = 24;
-    const margin = 24;
+  const downloadPhoto = () => {
+    const photoCanvas = createPhotoCanvas();
+    if (!photoCanvas) {
+      showToast('Нет фото для скачивания');
+      return;
+    }
+    const d = DOCS[docIdx];
+    const fileName = `фото-${d.w}x${d.h}mm.jpg`;
+    
+    // Use toDataURL directly - more reliable than toBlob
+    try {
+      const dataUrl = photoCanvas.toDataURL('image/jpeg', 0.95);
+      const a = document.createElement('a');
+      a.href = dataUrl;
+      a.download = fileName;
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => document.body.removeChild(a), 100);
+      showToast('Фото скачано!');
+    } catch (err) {
+      console.error('Download error:', err);
+      showToast('Ошибка скачивания фото');
+    }
+  };
+
+  const downloadSheet = (sheetWidth: number, sheetHeight: number, sheetName: string) => {
+    const photoCanvas = createPhotoCanvas();
+    if (!photoCanvas) {
+      showToast('Нет фото для скачивания');
+      return;
+    }
+    const SW = Math.round(sheetWidth * MM_PX);
+    const SH = Math.round(sheetHeight * MM_PX);
+    const pw = photoCanvas.width;
+    const ph = photoCanvas.height;
+    const gap = Math.round(20 * MM_PX); // 20mm gap
+    const margin = Math.round(10 * MM_PX); // 10mm margin
     const cols = Math.floor((SW - 2 * margin + gap) / (pw + gap));
     const rows = Math.floor((SH - 2 * margin + gap) / (ph + gap));
     if (cols < 1 || rows < 1) {
-      showToast('Фото не помещается на лист 10×15 см');
+      showToast(`Фото не помещается на лист ${sheetName}`);
       return;
     }
     const sheet = document.createElement('canvas');
@@ -311,61 +354,83 @@ function App() {
     if (!sctx) return;
     sctx.fillStyle = '#ffffff';
     sctx.fillRect(0, 0, SW, SH);
+    // Draw cutting guides
+    sctx.strokeStyle = '#cccccc';
+    sctx.setLineDash([Math.round(8 * MM_PX), Math.round(6 * MM_PX)]);
+    sctx.lineWidth = Math.round(1.5 * MM_PX);
     const totalW = cols * pw + (cols - 1) * gap;
     const totalH = rows * ph + (rows - 1) * gap;
     const startX = (SW - totalW) / 2;
     const startY = (SH - totalH) / 2;
-    sctx.strokeStyle = '#c3c8d9';
-    sctx.setLineDash([10, 8]);
-    sctx.lineWidth = 2;
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
         const px = startX + c * (pw + gap);
         const py = startY + r * (ph + gap);
-        sctx.drawImage(canvasRef.current, px, py);
-        sctx.strokeRect(px - 4, py - 4, pw + 8, ph + 8);
+        sctx.drawImage(photoCanvas, px, py);
+        // Cutting guide
+        sctx.strokeRect(px, py, pw, ph);
       }
     }
-    sheet.toBlob(
-      (blob) => {
-        if (blob) saveBlob(blob, `list-10x15-${cols}x${rows}.jpg`);
-      },
-      'image/jpeg',
-      0.92
-    );
-    showToast(`Лист 10×15: ${cols * rows} фото — несите в любую фотопечать`);
+    const fileName = `лист-${sheetName}-${cols}x${rows}.jpg`;
+    
+    // Use toDataURL directly - more reliable than toBlob
+    try {
+      const dataUrl = sheet.toDataURL('image/jpeg', 0.95);
+      const a = document.createElement('a');
+      a.href = dataUrl;
+      a.download = fileName;
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => document.body.removeChild(a), 100);
+      showToast(`Лист ${sheetName}: ${cols * rows} фото готово для печати!`);
+    } catch (err) {
+      console.error('Sheet download error:', err);
+      showToast('Ошибка скачивания листа');
+    }
   };
 
-  const saveBlob = (blob: Blob, name: string) => {
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = name;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-  };
+
 
   // Drag handlers for canvas
-  const handlePointerDown = (e: React.PointerEvent) => {
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
     isDraggingRef.current = true;
     dragStartRef.current = { x: e.clientX, y: e.clientY };
-    stageBoxRef.current?.setPointerCapture(e.pointerId);
+    console.log('Pointer down:', e.clientX, e.clientY);
+    (e.currentTarget as HTMLDivElement).setPointerCapture(e.pointerId);
   };
 
-  const handlePointerMove = (e: React.PointerEvent) => {
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!isDraggingRef.current || !canvasRef.current) return;
+    e.preventDefault();
     const rect = canvasRef.current.getBoundingClientRect();
     const k = canvasRef.current.width / rect.width;
+    const dx = (e.clientX - dragStartRef.current.x) * k;
+    const dy = (e.clientY - dragStartRef.current.y) * k;
+    console.log('Pointer move:', dx, dy, 'offset will be:', offset.x + dx, offset.y + dy);
     setOffset((prev) => ({
-      x: prev.x + (e.clientX - dragStartRef.current.x) * k,
-      y: prev.y + (e.clientY - dragStartRef.current.y) * k,
+      x: prev.x + dx,
+      y: prev.y + dy,
     }));
     dragStartRef.current = { x: e.clientX, y: e.clientY };
   };
 
-  const handlePointerUp = () => {
+  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
     isDraggingRef.current = false;
+    console.log('Pointer up');
+    (e.currentTarget as HTMLDivElement).releasePointerCapture(e.pointerId);
+  };
+
+  // Auto-fit: center the image and adjust zoom to fit the face area
+  const autoFit = () => {
+    if (!img || !canvasRef.current) return;
+    const s = outSize();
+    // Calculate zoom to fit image height to canvas
+    const fitZoom = Math.min(s.W / img.width, s.H / img.height) * 1.1;
+    setZoom(Math.min(3.2, Math.max(0.6, fitZoom)));
+    setOffset({ x: 0, y: 0 });
+    showToast('Фото подогнано автоматически');
   };
 
   const handleWheel = (e: React.WheelEvent) => {
@@ -629,6 +694,9 @@ function App() {
                     <button className="btn btn-ghost btn-sm" onClick={aiBackground} disabled={bgLoading}>
                       {bgLoading ? '⏳ Обрабатываем…' : bgDone ? '✅ Фон убран (AI)' : '✨ Убрать фон (AI)'}
                     </button>
+                    <button className="btn btn-ghost btn-sm" onClick={autoFit}>
+                      🎯 Автоподгонка
+                    </button>
                     <button
                       className="btn btn-ghost btn-sm"
                       onClick={() => {
@@ -642,10 +710,16 @@ function App() {
                       Другое фото
                     </button>
                     <button className="btn btn-primary btn-sm" onClick={downloadPhoto}>
-                      Скачать фото
+                      📷 Скачать 1 фото
                     </button>
-                    <button className="btn btn-primary btn-sm" onClick={downloadSheet}>
-                      Лист 10×15 для печати
+                    <button className="btn btn-primary btn-sm" onClick={() => downloadSheet(100, 150, '10x15')}>
+                      📄 Лист 10×15 см
+                    </button>
+                    <button className="btn btn-primary btn-sm" onClick={() => downloadSheet(150, 200, '15x20')}>
+                      📄 Лист 15×20 см
+                    </button>
+                    <button className="btn btn-primary btn-sm" onClick={() => downloadSheet(210, 297, 'A4')}>
+                      📄 Лист A4
                     </button>
                   </div>
                 </div>
